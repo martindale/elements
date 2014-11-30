@@ -179,6 +179,7 @@ class CTxOut
 {
 public:
     CTxOutValue nValue;
+    CAssetID assetID;
     CScript scriptPubKey;
 
     CTxOut()
@@ -193,12 +194,14 @@ public:
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
         READWRITE(nValue);
+        READWRITE(assetID);
         READWRITE(scriptPubKey);
     }
 
     void SetNull()
     {
         nValue = CTxOutValue();
+        assetID.SetNull();
         scriptPubKey.clear();
     }
 
@@ -227,6 +230,7 @@ public:
     friend bool operator==(const CTxOut& a, const CTxOut& b)
     {
         return (a.nValue       == b.nValue &&
+                a.assetID      == b.assetID &&
                 a.scriptPubKey == b.scriptPubKey);
     }
 
