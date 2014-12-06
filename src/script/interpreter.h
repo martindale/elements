@@ -95,6 +95,9 @@ enum
     // Making v1-v16 witness program non-standard
     //
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM = (1U << 12),
+
+    // Execute sidechain-related opcodes instead of treating them as NOPs
+    SCRIPT_VERIFY_WITHDRAW = (1U << 13),
 };
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);

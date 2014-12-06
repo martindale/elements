@@ -81,6 +81,14 @@ const char* ScriptErrorString(const ScriptError serror)
             return "Witness requires only-redeemscript scriptSig";
         case SCRIPT_ERR_WITNESS_UNEXPECTED:
             return "Witness provided for non-witness script";
+        case SCRIPT_ERR_WITHDRAW_VERIFY_FORMAT:
+            return "Withdraw proof validation failed - invalid proof format";
+        case SCRIPT_ERR_WITHDRAW_VERIFY_BLOCK:
+            return "Withdraw proof validation failed - SPV proof/block coinbase invalid";
+        case SCRIPT_ERR_WITHDRAW_VERIFY_LOCKTX:
+            return "Withdraw proof validation failed - locking transaction misformatted";
+        case SCRIPT_ERR_WITHDRAW_VERIFY_OUTPUT:
+            return "Withdraw proof validation failed - output does not match expected";
         case SCRIPT_ERR_UNKNOWN_ERROR:
         case SCRIPT_ERR_ERROR_COUNT:
         default: break;
