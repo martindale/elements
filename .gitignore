@@ -36,6 +36,8 @@ share/setup.nsi
 share/qt/Info.plist
 
 src/univalue/gen
+cache/
+src/build-aux/
 
 src/qt/*.moc
 src/qt/moc_*.cpp
