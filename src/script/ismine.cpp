@@ -5,6 +5,7 @@
 
 #include "ismine.h"
 
+#include "chainparams.h"
 #include "key.h"
 #include "keystore.h"
 #include "script/script.h"
@@ -100,6 +101,9 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey)
             return ISMINE_SPENDABLE;
         break;
     }
+    case TX_TRUE:
+        if (Params().NetworkIDString() == "betaregtest")
+            return ISMINE_SPENDABLE;
     }
 
     if (keystore.HaveWatchOnly(scriptPubKey)) {

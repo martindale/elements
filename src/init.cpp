@@ -1428,6 +1428,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         if (!pwalletMain)
             return false;
     }
+
 #else // ENABLE_WALLET
     LogPrintf("No wallet support compiled in!\n");
 #endif // !ENABLE_WALLET
@@ -1489,6 +1490,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             condvar_GenesisWait.wait(lock);
         }
         uiInterface.NotifyBlockTip.disconnect(BlockNotifyGenesisWait);
+    }
+
+    CBlockIndex *genesis = chainActive.Genesis();
+    const CBlock &genesisBlock = Params().GenesisBlock();
+    for (unsigned int i = 0; i<genesis->nTx ; i++) {
+        SyncWithWallets(genesisBlock.vtx[i], genesis, i);
     }
 
     // ********************************************************* Step 11: start node
