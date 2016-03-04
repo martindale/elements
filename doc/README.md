@@ -1,9 +1,5 @@
-Bitcoin Core 0.13.99
+Elements Beta 0.13.0
 =====================
-
-Setup
----------------------
-[Bitcoin Core](http://bitcoin.org/en/download) is the original Bitcoin client and it builds the backbone of the network. However, it downloads and stores the entire history of Bitcoin transactions (which is currently several GBs); depending on the speed of your computer and network connection, the synchronization process can take anywhere from a few hours to a day or more.
 
 Running
 ---------------------
@@ -11,10 +7,14 @@ The following are some helpful notes on how to run Bitcoin on your native platfo
 
 ### Unix
 
+You need the Qt4 run-time libraries to run Bitcoin-Qt. On Debian or Ubuntu:
+
+	sudo apt-get install libqtgui4
+
 Unpack the files into a directory and run:
 
-- `bin/bitcoin-qt` (GUI) or
-- `bin/bitcoind` (headless)
+- bin/32/bitcoin-qt (GUI, 32-bit) or bin/32/bitcoind (headless, 32-bit)
+- bin/64/bitcoin-qt (GUI, 64-bit) or bin/64/bitcoind (headless, 64-bit)
 
 ### Windows
 
