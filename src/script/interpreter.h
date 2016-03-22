@@ -121,6 +121,12 @@ public:
         return false;
     }
 
+    virtual CScript GetFedpegScript() const
+    {
+        CScript fedpegScript(CScript() << OP_FALSE);
+        return fedpegScript;
+    }
+
     virtual bool CheckLockTime(const CScriptNum& nLockTime) const
     {
          return false;
@@ -181,14 +187,19 @@ class TransactionSignatureChecker : public TransactionNoWithdrawsSignatureChecke
 {
 private:
     const CTxOutValue amountPreviousInput;
+    const CScript fedpegScript;
 
 public:
-    TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn, const CTxOutValue& amountIn, const CTxOutValue& amountPreviousInputIn) : TransactionNoWithdrawsSignatureChecker(txToIn, nInIn, amountIn), amountPreviousInput(amountPreviousInputIn) {}
+    TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn, const CTxOutValue& amountIn, const CTxOutValue& amountPreviousInputIn, const CScript& fedpegScriptIn) : TransactionNoWithdrawsSignatureChecker(txToIn, nInIn, amountIn), amountPreviousInput(amountPreviousInputIn), fedpegScript(fedpegScriptIn) {}
     CTxOut GetOutputOffsetFromCurrent(const int offset) const;
     COutPoint GetPrevOut() const;
     CTxOutValue GetValueIn() const;
     CTxOutValue GetValueInPrevIn() const;
     bool IsConfirmedBitcoinBlock(const uint256& genesishash, const uint256& hash, bool fConservativeConfirmationRequirements) const;
+    virtual CScript GetFedpegScript() const
+    {
+        return fedpegScript;
+    }
 };
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* error = NULL);
