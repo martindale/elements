@@ -57,9 +57,11 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
     coinbaseKey.MakeNewKey(true);
     CScript scriptPubKey = CScript() <<  ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
     CMutableTransaction newCoinbase(Params().GenesisBlock().vtx[0]);
-    newCoinbase.vout[0].scriptPubKey = scriptPubKey;
+    for (unsigned int i = 0; i < Params().GenesisBlock().vtx[0].vout.size(); i++)
+        newCoinbase.vout[i].scriptPubKey = scriptPubKey;
     const_cast<CBlock&>(Params().GenesisBlock()).vtx[0] = newCoinbase;
     const_cast<CBlock&>(Params().GenesisBlock()).hashMerkleRoot = BlockMerkleRoot(Params().GenesisBlock());
+    const_cast<CBlock&>(Params().GenesisBlock()).proof = CProof(CScript()<<OP_TRUE, CScript());
     const_cast<Consensus::Params&>(Params().GetConsensus()).hashGenesisBlock = Params().GenesisBlock().GetHash();
 
         ClearDatadirCache();
