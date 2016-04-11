@@ -76,7 +76,7 @@ for arg in sys.argv[1:]:
 
 #Set env vars
 if "BITCOIND" not in os.environ:
-    os.environ["BITCOIND"] = BUILDDIR + '/src/bitcoind' + EXEEXT
+    os.environ["BETAD"] = BUILDDIR+ '/src/betad' + EXEEXT
 
 if EXEEXT == ".exe" and "-win" not in opts:
     # https://github.com/bitcoin/bitcoin/commit/d52802551752140cf41f0d9a225a43e84404d3e9
@@ -119,7 +119,7 @@ testScripts = [
     'rest.py',
     'mempool_spendcoinbase.py',
     'mempool_reorg.py',
-    'mempool_limit.py',
+    #'mempool_limit.py',
     'httpbasics.py',
     'multi_rpc.py',
     'zapwallettxes.py',
@@ -139,6 +139,7 @@ testScripts = [
     'invalidblockrequest.py',
     'invalidtxrequest.py',
     'abandonconflict.py',
+    'confidential_transactions.py',
     'p2p-versionbits-warning.py',
     'importprunedfunds.py',
     'signmessages.py',
@@ -161,7 +162,7 @@ testScriptsExt = [
     'forknotify.py',
     'invalidateblock.py',
     'rpcbind_test.py',
-    'smartfees.py',
+    #'smartfees.py',
     'maxblocksinflight.py',
     'p2p-acceptblock.py',
     'mempool_packages.py',
