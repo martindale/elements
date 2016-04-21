@@ -27,6 +27,11 @@
 
 #include <memory> // for unique_ptr
 
+//For thread local rpc username
+#include <boost/thread/tss.hpp>
+//Thread local rpc user name for logging purposes
+boost::thread_specific_ptr<std::string> userInstance;
+
 using namespace RPCServer;
 using namespace std;
 
