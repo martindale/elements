@@ -46,6 +46,7 @@ extern std::map<std::string, std::vector<std::string> > mapMultiArgs;
 extern bool fDebug;
 extern bool fPrintToConsole;
 extern bool fPrintToDebugLog;
+extern bool fPrintToAuditLog;
 extern bool fServer;
 extern std::string strMiscWarning;
 extern bool fLogTimestamps;
@@ -73,22 +74,32 @@ bool SetupNetworking();
 /** Return true if log accepts specified category */
 bool LogAcceptCategory(const char* category);
 /** Send a string to the log output */
-int LogPrintStr(const std::string &str);
+int DebugLogPrintStr(const std::string &str);
+/** Send a string to the audit log output */
+int AuditLogPrintStr(const std::string &str);
 
 #define LogPrintf(...) LogPrint(NULL, __VA_ARGS__)
+#define AuditLogPrintf(...) AuditLogPrint(NULL, __VA_ARGS__)
 
 template<typename... Args>
 static inline int LogPrint(const char* category, const char* fmt, const Args&... args)
 {
     if(!LogAcceptCategory(category)) return 0;                            \
-    return LogPrintStr(tfm::format(fmt, args...));
+    return DebugLogPrintStr(tfm::format(fmt, args...));
 }
 
 template<typename... Args>
 bool error(const char* fmt, const Args&... args)
 {
-    LogPrintStr("ERROR: " + tfm::format(fmt, args...) + "\n");
+    DebugLogPrintStr("ERROR: " + tfm::format(fmt, args...) + "\n");
     return false;
+}
+
+template<typename... Args>
+static inline int AuditLogPrint(const char* category, const char* fmt, const Args&... args)
+{
+    if(!LogAcceptCategory(category)) return 0;                            \
+    return AuditLogPrintStr(tfm::format(fmt, args...));
 }
 
 void PrintExceptionContinue(const std::exception *pex, const char* pszThread);
@@ -112,6 +123,7 @@ void ReadConfigFile(std::map<std::string, std::string>& mapSettingsRet, std::map
 boost::filesystem::path GetSpecialFolderPath(int nFolder, bool fCreate = true);
 #endif
 void OpenDebugLog();
+void OpenAuditLog();
 void ShrinkDebugFile();
 void runCommand(const std::string& strCommand);
 
