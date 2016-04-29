@@ -7,22 +7,22 @@ The following are some helpful notes on how to run Bitcoin on your native platfo
 
 ### Unix
 
-You need the Qt4 run-time libraries to run Bitcoin-Qt. On Debian or Ubuntu:
+You need the Qt4 run-time libraries to run Beta-Qt. On Debian or Ubuntu:
 
 	sudo apt-get install libqtgui4
 
 Unpack the files into a directory and run:
 
-- bin/32/bitcoin-qt (GUI, 32-bit) or bin/32/bitcoind (headless, 32-bit)
-- bin/64/bitcoin-qt (GUI, 64-bit) or bin/64/bitcoind (headless, 64-bit)
+- bin/32/beta-qt (GUI, 32-bit) or bin/32/betad (headless, 32-bit)
+- bin/64/beta-qt (GUI, 64-bit) or bin/64/betad (headless, 64-bit)
 
 ### Windows
 
-Unpack the files into a directory, and then run bitcoin-qt.exe.
+Unpack the files into a directory, and then run beta-qt.exe.
 
 ### OS X
 
-Drag Bitcoin-Core to your applications folder, and then run Bitcoin-Core.
+Drag Beta-Sidechain to your applications folder, and then run Beta-Sidechain.
 
 ### Need Help?
 
