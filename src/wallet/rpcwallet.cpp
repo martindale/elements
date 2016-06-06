@@ -441,7 +441,7 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
 
     SendMoney(address.Get(), nAmount, fSubtractFeeFromAmount, confidentiality_pubkey, wtx);
 
-    AuditLogPrintf("%s : sendtoaddress %s %d", getUser(), wtx.GetHash().GetHex(), nAmount);
+    AuditLogPrintf("%s : sendtoaddress %s %s txid:%s\n", getUser(), params[0].get_str(), params[1].getValStr(), wtx.GetHash().GetHex());
 
     return wtx.GetHash().GetHex();
 }
@@ -873,6 +873,8 @@ UniValue sendfrom(const UniValue& params, bool fHelp)
 
     SendMoney(address.Get(), nAmount, false, confidentiality_pubkey, wtx);
 
+    AuditLogPrintf("%s : sendfrom %s %s %s txid:%s\n", getUser(), params[0].get_str(), params[1].get_str(), params[2].getValStr(), wtx.GetHash().GetHex());
+
     return wtx.GetHash().GetHex();
 }
 
@@ -938,6 +940,9 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     set<CBitcoinAddress> setAddress;
     vector<CRecipient> vecSend;
 
+    std::string strAudit(getUser());
+    strAudit += " : sendmany \n";
+
     CAmount totalAmount = 0;
     vector<string> keys = sendTo.getKeys();
     BOOST_FOREACH(const string& name_, keys)
@@ -956,6 +961,7 @@ UniValue sendmany(const UniValue& params, bool fHelp)
             throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount for send");
         totalAmount += nAmount;
 
+        strAudit += name_ + " " + sendTo[name_].getValStr() + "\n";
 
         CPubKey confidentiality_pubkey;
         if (address.IsBlinded())
@@ -970,6 +976,7 @@ UniValue sendmany(const UniValue& params, bool fHelp)
 
         CRecipient recipient = {scriptPubKey, nAmount, confidentiality_pubkey, fSubtractFeeFromAmount};
         vecSend.push_back(recipient);
+
     }
 
     EnsureWalletIsUnlocked();
@@ -989,6 +996,8 @@ UniValue sendmany(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, strFailReason);
     if (!pwalletMain->CommitTransaction(wtx, keyChange))
         throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
+
+    AuditLogPrintf("%s", strAudit);
 
     return wtx.GetHash().GetHex();
 }
@@ -1041,6 +1050,9 @@ UniValue addmultisigaddress(const UniValue& params, bool fHelp)
     pwalletMain->AddCScript(inner);
 
     pwalletMain->SetAddressBook(innerID, strAccount, "send");
+
+    AuditLogPrintf("%s : addmultisigaddress %s\n", getUser(), CBitcoinAddress(innerID).ToString());
+
     return CBitcoinAddress(innerID).ToString();
 }
 
@@ -1120,6 +1132,8 @@ UniValue addwitnessaddress(const UniValue& params, bool fHelp)
     if (!ret) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Public key or redeemscript not known to wallet");
     }
+
+    AuditLogPrintf("%s : addwitnessaddress %s\n", getUser(), CBitcoinAddress(w.result).ToString());
 
     return CBitcoinAddress(w.result).ToString();
 }
@@ -1879,6 +1893,8 @@ UniValue backupwallet(const UniValue& params, bool fHelp)
     if (!pwalletMain->BackupWallet(strDest))
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: Wallet backup failed!");
 
+    AuditLogPrintf("%s : backupwallet %s\n", getUser(), strDest);
+
     return NullUniValue;
 }
 
@@ -1983,6 +1999,8 @@ UniValue walletpassphrase(const UniValue& params, bool fHelp)
     nWalletUnlockTime = GetTime() + nSleepTime;
     RPCRunLater("lockwallet", boost::bind(LockWallet, pwalletMain), nSleepTime);
 
+    AuditLogPrintf("%s : walletpassphrase\n", getUser());
+
     return NullUniValue;
 }
 
@@ -2028,6 +2046,8 @@ UniValue walletpassphrasechange(const UniValue& params, bool fHelp)
 
     if (!pwalletMain->ChangeWalletPassphrase(strOldWalletPass, strNewWalletPass))
         throw JSONRPCError(RPC_WALLET_PASSPHRASE_INCORRECT, "Error: The wallet passphrase entered was incorrect.");
+
+    AuditLogPrintf("%s : walletpassphrasechange\n", getUser());
 
     return NullUniValue;
 }
@@ -2121,6 +2141,8 @@ UniValue encryptwallet(const UniValue& params, bool fHelp)
 
     if (!pwalletMain->EncryptWallet(strWalletPass))
         throw JSONRPCError(RPC_WALLET_ENCRYPTION_FAILED, "Error: Failed to encrypt the wallet.");
+
+    AuditLogPrintf("%s : encryptwallet\n", getUser());
 
     // BDB seems to have a bad habit of writing old data into
     // slack space in .dat files; that is bad if the old data is
@@ -2291,6 +2313,9 @@ UniValue settxfee(const UniValue& params, bool fHelp)
     CAmount nAmount = AmountFromValue(params[0]);
 
     payTxFee = CFeeRate(nAmount, 1000);
+
+    AuditLogPrintf("%s : settxfee %s\n", getUser(), params[0].getValStr());
+
     return true;
 }
 
@@ -2757,6 +2782,8 @@ UniValue getpeginaddress(const UniValue& params, bool fHelp)
 
     UniValue fundinginfo(UniValue::VOBJ);
 
+    AuditLogPrintf("%s : getpeginaddress mainaddress: %s address: %s\n", getUser(), destAddr.ToString(), address.ToString());
+
     fundinginfo.pushKV("mainaddress", destAddr.ToString());
     fundinginfo.pushKV("address", address.ToString());
     return fundinginfo;
@@ -2829,6 +2856,8 @@ UniValue sendtomainchain(const UniValue& params, bool fHelp)
 
     CWalletTx wtxNew;
     SendMoney(scriptPubKey, nAmount, false, CPubKey(), wtxNew);
+
+    AuditLogPrintf("%s : sendtomainchain %s\n", getUser(), wtxNew.ToString());
 
     return wtxNew.GetHash().GetHex();
 }
@@ -2959,7 +2988,10 @@ UniValue claimpegin(const UniValue& params, bool fHelp)
     CTransaction finalTxn(mtxn);
     UniValue signedTxnArray(UniValue::VARR);
     signedTxnArray.push_back(EncodeHexTx(finalTxn));
-    return sendrawtransaction(signedTxnArray, false);
+
+    sendrawtransaction(signedTxnArray, false);
+    AuditLogPrintf("%s : claimpegin %s\n", getUser(), finalTxn.ToString());
+    return finalTxn.GetHash().GetHex();
 }
 
 extern UniValue dumpprivkey(const UniValue& params, bool fHelp); // in rpcdump.cpp
