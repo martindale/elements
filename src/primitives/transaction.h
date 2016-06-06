@@ -287,6 +287,11 @@ public:
             READWRITE(ref.nValue.vchNonceCommitment);
         }
     }
+
+    void SetNull() {
+        std::vector<unsigned char>().swap(ref.nValue.vchRangeproof);
+        std::vector<unsigned char>().swap(ref.nValue.vchNonceCommitment);
+    }
 };
 
 
