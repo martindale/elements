@@ -3832,6 +3832,12 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
             fHaveWitness = true;
             break;
         }
+        for (size_t o = 0; o < block.vtx[t].vout.size(); o++) {
+            if (!CTxOutWitnessSerializer(REF(block.vtx[t].vout[o])).IsNull()) {
+                fHaveWitness = true;
+                break;
+            }
+        }
     }
     std::vector<unsigned char> ret(32, 0x00);
     if (fHaveWitness && IsWitnessEnabled(pindexPrev, consensusParams)) {
@@ -3952,6 +3958,11 @@ bool ContextualCheckBlock(const CBlock& block, CValidationState& state, const Co
         for (size_t i = 0; i < block.vtx.size(); i++) {
             if (!block.vtx[i].wit.IsNull()) {
                 return state.DoS(100, false, REJECT_INVALID, "unexpected-witness", true, strprintf("%s : unexpected witness data found", __func__));
+            }
+            for (size_t o = 0; o < block.vtx[i].vout.size(); o++) {
+                if (!CTxOutWitnessSerializer(REF(block.vtx[i].vout[o])).IsNull()) {
+                    return state.DoS(100, false, REJECT_INVALID, "unexpected-witness", true, strprintf("%s : unexpected output witness data found", __func__));
+                }
             }
         }
     }
