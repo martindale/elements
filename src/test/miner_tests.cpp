@@ -208,12 +208,15 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     std::vector<unsigned char> vchSig;
 
 
+    unsigned int blockheight = pblocktemplate->block.nHeight;
+
     // Mature the genesis coinbase
     for (unsigned int i = 0; i < 102; i++)
     int baseheight = 0;
     {
         CBlock *pblock = &pblocktemplate->block; // pointer for convenience
         pblock->nVersion = 1;
+        pblock->nHeight = blockheight++;
         pblock->nTime = chainActive.Tip()->GetMedianTimePast()+1;
         CMutableTransaction txCoinbase(pblock->vtx[0]);
         txCoinbase.nVersion = 1;
