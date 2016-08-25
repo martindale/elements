@@ -508,10 +508,8 @@ void BlockAssembler::addPackageTxs()
 void BlockAssembler::addPriorityTxs()
 {
     // How much of the block should be dedicated to high-priority transactions,
-    // included regardless of the fees they pay
-    unsigned int nBlockPrioritySize = GetArg("-blockprioritysize", DEFAULT_BLOCK_PRIORITY_SIZE);
-    nBlockPrioritySize = std::min(nBlockMaxSize, nBlockPrioritySize);
-
+    // included regardless of the fees they pay. We max it out.
+    unsigned int nBlockPrioritySize = nBlockMaxSize;
     if (nBlockPrioritySize == 0) {
         return;
     }
