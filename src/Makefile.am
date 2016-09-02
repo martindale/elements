@@ -257,8 +257,11 @@ libbitcoin_consensus_a_SOURCES = \
   consensus/merkle.h \
   consensus/params.h \
   consensus/validation.h \
+  core_write.cpp \
   hash.cpp \
   hash.h \
+  merkleblock.cpp \
+  pow.cpp \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
@@ -274,10 +277,12 @@ libbitcoin_consensus_a_SOURCES = \
   script/script.h \
   script/script_error.cpp \
   script/script_error.h \
+  script/sign.cpp \
   serialize.h \
   tinyformat.h \
   uint256.cpp \
   uint256.h \
+  utilmoneystr.cpp \
   utilstrencodings.cpp \
   utilstrencodings.h \
   version.h
