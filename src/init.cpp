@@ -955,13 +955,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // a transaction spammer can cheaply fill blocks using
     // 1-satoshi-fee transactions. It should be set above the real
     // cost to you of processing a transaction.
-    if (mapArgs.count("-minrelaytxfee"))
-    {
-        CAmount n = 0;
-        if (ParseMoney(mapArgs["-minrelaytxfee"], n) && n > 0)
-            ::minRelayTxFee = CFeeRate(n);
-        else
-            return InitError(AmountErrMsg("minrelaytxfee", mapArgs["-minrelaytxfee"]));
+    try {
+        ::minRelayTxFee = CFeeRate(ParseAmountFromArgs("-minrelaytxfee", 0, mapArgs));
+    } catch(const boost::interprocess::interprocess_exception& e) {
+        return InitError(strprintf(_("Error: %s: '%s'"), __func__, e.what()));
     }
 
     fRequireStandard = !GetBoolArg("-acceptnonstdtxn", !Params().RequireStandard());
