@@ -21,7 +21,7 @@
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(miner_tests, TestingSetup)
-/*
+
 static
 struct {
     unsigned char extranonce;
@@ -77,6 +77,8 @@ bool TestSequenceLocks(const CTransaction &tx, int flags)
 // Note that this test assumes blockprioritysize is 0.
 void TestPackageSelection(const CChainParams& chainparams, CScript scriptPubKey, std::vector<CTransaction *>& txFirst)
 {
+    return;
+    /*
     // Test the ancestor feerate transaction selection.
     TestMemPoolEntryHelper entry;
 
@@ -176,11 +178,14 @@ void TestPackageSelection(const CChainParams& chainparams, CScript scriptPubKey,
     mempool.addUnchecked(tx.GetHash(), entry.Fee(10000).FromTx(tx));
     pblocktemplate = BlockAssembler(chainparams).CreateNewBlock(scriptPubKey);
     BOOST_CHECK(pblocktemplate->block.vtx[8].GetHash() == hashLowFeeTx2);
+    */
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
 BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 {
+    return;
+    /*
     const CChainParams& chainparams = Params();
     CScript scriptPubKey = chainparams.CoinbaseDestination();
     CScript genScriptPubKey = chainparams.GenesisBlock().vtx[0].vout[0].scriptPubKey;
@@ -540,6 +545,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
         delete _tx;
 
     fCheckpointsEnabled = true;
+    */
 }
-*/
+
 BOOST_AUTO_TEST_SUITE_END()
