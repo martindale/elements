@@ -48,6 +48,14 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
 class CElementsParams : public CChainParams {
 public:
     CElementsParams() {
+        std::map<std::string, std::string> mapArgs;
+        Reset(mapArgs);
+    }
+    CElementsParams(const std::map<std::string, std::string>& mapArgs) {
+        Reset(mapArgs);
+    }
+    void Reset(const std::map<std::string, std::string>& mapArgs)
+    {
         strNetworkID = CHAINPARAMS_ELEMENTS;
         consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP34Height = 227931;
@@ -132,7 +140,7 @@ public:
  */
 class CMainParams : public CElementsParams {
 public:
-    CMainParams() : CElementsParams() {
+    CMainParams(const std::map<std::string, std::string>& mapArgs) : CElementsParams(mapArgs) {
         strNetworkID = CHAINPARAMS_OLD_MAIN;
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
@@ -150,6 +158,14 @@ public:
 class CRegTestParams : public CChainParams {
 public:
     CRegTestParams() {
+        std::map<std::string, std::string> mapArgs;
+        Reset(mapArgs);
+    }
+    CRegTestParams(const std::map<std::string, std::string>& mapArgs) {
+        Reset(mapArgs);
+    }
+    void Reset(const std::map<std::string, std::string>& mapArgs)
+    {
         strNetworkID = CHAINPARAMS_REGTEST;
         consensus.nSubsidyHalvingInterval = 150;
         consensus.BIP34Height = 100000000; // BIP34 has not activated on regtest (far in the future so block v1 are not rejected in tests)
@@ -233,22 +249,22 @@ const CChainParams &Params() {
     return *globalChainParams;
 }
 
-CChainParams* CChainParams::Factory(const std::string& chain)
+CChainParams* CChainParams::Factory(const std::string& chain, const std::map<std::string, std::string>& mapArgs)
 {
     if (chain == CBaseChainParams::MAIN)
-        return new CMainParams();
+        return new CMainParams(mapArgs);
     else if (chain == CHAINPARAMS_ELEMENTS)
-        return new CElementsParams();
+        return new CElementsParams(mapArgs);
     else if (chain == CBaseChainParams::REGTEST)
-        return new CRegTestParams();
+        return new CRegTestParams(mapArgs);
     else
         throw std::runtime_error(strprintf("%s: Unknown chain %s.", __func__, chain));
 }
 
-void SelectParams(const std::string& network)
+void SelectParams(const std::string& network, const std::map<std::string, std::string>& mapArgs)
 {
     SelectBaseParams(network);
-    globalChainParams.reset(CChainParams::Factory(network));
+    globalChainParams.reset(CChainParams::Factory(network, mapArgs));
 }
 
 void UpdateRegtestBIP9Parameters(Consensus::DeploymentPos d, int64_t nStartTime, int64_t nTimeout)
