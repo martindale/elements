@@ -153,11 +153,6 @@ UniValue generate(const UniValue& params, bool fHelp)
     return arr;
 }
 
-UniValue generatetoaddress(const UniValue& params, bool fHelp)
-{
-    throw JSONRPCError(RPC_METHOD_NOT_FOUND, "This method cannot be used in private chain mode");
-}
-
 UniValue getnewblockhex(const UniValue& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
@@ -982,7 +977,6 @@ static const CRPCCommand commands[] =
     { "generating",         "combineblocksigs",       &combineblocksigs,       true  },
     { "generating",         "getnewblockhex",         &getnewblockhex,         true  },
     { "generating",         "generate",               &generate,               true  },
-    { "generating",         "generatetoaddress",      &generatetoaddress,      true  },
 
     { "util",               "estimatefee",            &estimatefee,            true  },
     { "util",               "estimatepriority",       &estimatepriority,       true  },
