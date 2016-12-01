@@ -61,6 +61,40 @@ void EnsureWalletIsUnlocked()
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED, "Error: Please enter the wallet passphrase with walletpassphrase first.");
 }
 
+// Attaches labeled balance reports to UniValue obj with asset filter
+// "*" displays *all* assets as VOBJ pairs, while named assets must have
+// been entered via addassetlabel RPC command and are returns as VNUM.
+UniValue PushAssetBalance(CAmountMap& balance, CWallet* wallet, std::string& strasset)
+{
+    UniValue obj(UniValue::VOBJ);
+    uint256 id = wallet->GetAssetIDFromLabel(strasset);
+    std::string label = wallet->GetAssetLabelFromID(uint256S(strasset));
+    if (strasset != "*" && (id == uint256() && label == "")) {
+       throw JSONRPCError(RPC_WALLET_ERROR, "Input does not match a known asset tag/label pair.");
+    }
+    else if (id != uint256()) {
+        strasset = id.GetHex();
+    }
+
+    if (strasset == "*") {
+        for(std::map<CAssetID, CAmount>::const_iterator it = balance.begin(); it != balance.end(); ++it) {
+            // Unknown assets
+            if (it->first == uint256())
+                continue;
+            UniValue pair(UniValue::VOBJ);
+            if (wallet->mapAssetLabels.count(it->first)) {
+                obj.push_back((Pair(wallet->GetAssetLabelFromID(it->first), ValueFromAmount(it->second))));
+            }
+            else
+                obj.push_back(Pair(it->first.GetHex(), ValueFromAmount(it->second)));
+        }
+    }
+    else {
+        return ValueFromAmount(balance[uint256S(strasset)]);
+    }
+    return obj;
+}
+
 void WalletTxToJSON(const CWalletTx& wtx, UniValue& entry)
 {
     int confirms = wtx.GetDepthInMainChain();
@@ -344,15 +378,15 @@ UniValue getaddressesbyaccount(const UniValue& params, bool fHelp)
     return ret;
 }
 
-static void SendMoney(const CScript& scriptPubKey, CAmount nValue, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew);
-static void SendMoney(const CTxDestination &address, CAmount nValue, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew)
+static void SendMoney(const CScript& scriptPubKey, CAmount nValue, CAssetID assetID, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew);
+static void SendMoney(const CTxDestination &address, CAmount nValue, CAssetID assetID, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew)
 {
-    SendMoney(GetScriptForDestination(address), nValue, fSubtractFeeFromAmount, confidentiality_key, wtxNew);
+    SendMoney(GetScriptForDestination(address), nValue, assetID, fSubtractFeeFromAmount, confidentiality_key, wtxNew);
 }
 
-static void SendMoney(const CScript& scriptPubKey, CAmount nValue, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew)
+static void SendMoney(const CScript& scriptPubKey, CAmount nValue, CAssetID assetID, bool fSubtractFeeFromAmount, const CPubKey &confidentiality_key, CWalletTx& wtxNew)
 {
-    CAmount curBalance = pwalletMain->GetBalance();
+    CAmount curBalance = pwalletMain->GetBalance()[assetID];
 
     // Check amount
     if (nValue <= 0)
@@ -362,19 +396,26 @@ static void SendMoney(const CScript& scriptPubKey, CAmount nValue, bool fSubtrac
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
 
     // Create and send the transaction
-    CReserveKey reservekey(pwalletMain);
+    std::vector<CReserveKey> vChangeKey;
+    std::vector<CReserveKey*> vpChangeKey;
+    vChangeKey.push_back(CReserveKey(pwalletMain));
+    vpChangeKey.push_back(&vChangeKey[0]);
+    if (pwalletMain->GetAssetIDFromLabel("bitcoin") != assetID) {
+        vChangeKey.push_back(CReserveKey(pwalletMain));
+        vpChangeKey.push_back(&vChangeKey[1]);
+    }
     CAmount nFeeRequired;
     std::string strError;
     vector<CRecipient> vecSend;
     int nChangePosRet = -1;
-    CRecipient recipient = {scriptPubKey, nValue, confidentiality_key, fSubtractFeeFromAmount};
+    CRecipient recipient = {scriptPubKey, nValue, assetID, confidentiality_key, fSubtractFeeFromAmount};
     vecSend.push_back(recipient);
-    if (!pwalletMain->CreateTransaction(vecSend, wtxNew, reservekey, nFeeRequired, nChangePosRet, strError)) {
-        if (!fSubtractFeeFromAmount && nValue + nFeeRequired > pwalletMain->GetBalance())
+    if (!pwalletMain->CreateTransaction(vecSend, wtxNew, vpChangeKey, nFeeRequired, nChangePosRet, strError)) {
+        if (!fSubtractFeeFromAmount && nValue + nFeeRequired > curBalance)
             strError = strprintf("Error: This transaction requires a transaction fee of at least %s because of its amount, complexity, or use of recently received funds!", FormatMoney(nFeeRequired));
         throw JSONRPCError(RPC_WALLET_ERROR, strError);
     }
-    if (!pwalletMain->CommitTransaction(wtxNew, reservekey))
+    if (!pwalletMain->CommitTransaction(wtxNew, vpChangeKey))
         throw JSONRPCError(RPC_WALLET_ERROR, "Error: The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of the wallet and coins were spent in the copy but not marked as spent here.");
 }
 
@@ -383,7 +424,7 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 2 || params.size() > 5)
+    if (fHelp || params.size() < 2 || params.size() > 6)
         throw runtime_error(
             "sendtoaddress \"bitcoinaddress\" amount ( \"comment\" \"comment-to\" subtractfeefromamount )\n"
             "\nSend an amount to a given address.\n"
@@ -397,6 +438,7 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
             "                             to which you're sending the transaction. This is not part of the \n"
             "                             transaction, just kept in your wallet.\n"
             "5. subtractfeefromamount  (boolean, optional, default=false) The fee will be deducted from the amount being sent.\n"
+            "6. \"assetlabel\"               (string, optional) Hex asset id or asset label for balance.\n"
             "                             The recipient will receive less bitcoins than you enter in the amount field.\n"
             "\nResult:\n"
             "\"transactionid\"  (string) The transaction id.\n"
@@ -434,9 +476,20 @@ UniValue sendtoaddress(const UniValue& params, bool fHelp)
     if (params.size() > 4)
         fSubtractFeeFromAmount = params[4].get_bool();
 
+    std::string asset = "bitcoin";
+    if (params.size() > 5 && params[5].isStr()) {
+        asset = params[5].get_str();
+    }
+
+    CAssetID id(uint256S(asset));
+    if (pwalletMain->GetAssetLabelFromID(uint256S(asset)) == "")
+        id = pwalletMain->GetAssetIDFromLabel(asset);
+    if (id == uint256())
+        throw JSONRPCError(RPC_WALLET_ERROR, "Unknown or invalid asset id/label");
+
     EnsureWalletIsUnlocked();
 
-    SendMoney(address.Get(), nAmount, fSubtractFeeFromAmount, confidentiality_pubkey, wtx);
+    SendMoney(address.Get(), nAmount, id, fSubtractFeeFromAmount, confidentiality_pubkey, wtx);
 
     std::string blinds;
     for (unsigned int i=0; i<wtx.vout.size(); i++) {
@@ -561,13 +614,14 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 1 || params.size() > 2)
+    if (fHelp || params.size() < 1 || params.size() > 3)
         throw runtime_error(
             "getreceivedbyaddress \"bitcoinaddress\" ( minconf )\n"
             "\nReturns the total amount received by the given bitcoinaddress in transactions with at least minconf confirmations.\n"
             "\nArguments:\n"
             "1. \"bitcoinaddress\"  (string, required) The bitcoin address for transactions.\n"
             "2. minconf             (numeric, optional, default=1) Only include transactions confirmed at least this many times.\n"
+            "3. \"assetlabel\"      (string, optional) Hex asset id or asset label for balance. \"*\" retrieves all known asset balances.\n"
             "\nResult:\n"
             "amount   (numeric) The total amount in " + CURRENCY_UNIT + " received at this address.\n"
             "\nExamples:\n"
@@ -597,7 +651,7 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
         nMinDepth = params[1].get_int();
 
     // Tally
-    CAmount nAmount = 0;
+    CAmountMap mapAmount;
     for (map<uint256, CWalletTx>::iterator it = pwalletMain->mapWallet.begin(); it != pwalletMain->mapWallet.end(); ++it)
     {
         const CWalletTx& wtx = (*it).second;
@@ -607,11 +661,18 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
 
         for (unsigned int i = 0; i < wtx.vout.size(); i++)
             if (wtx.vout[i].scriptPubKey == scriptPubKey)
-                if (wtx.GetDepthInMainChain() >= nMinDepth && wtx.GetValueOut(i) >= 0)
-                    nAmount += wtx.GetValueOut(i);
+                if (wtx.GetDepthInMainChain() >= nMinDepth && wtx.GetValueOut(i) >= 0) {
+                    CAmountMap wtxValue;
+                    wtxValue[wtx.GetAssetID(i)] = wtx.GetValueOut(i);
+                    mapAmount += wtxValue;
+                }
     }
 
-    return  ValueFromAmount(nAmount);
+    std::string asset = "bitcoin";
+    if (params.size() > 2 && params[2].isStr()) {
+        asset = params[2].get_str();
+    }
+    return PushAssetBalance(mapAmount, pwalletMain, asset);
 }
 
 
@@ -677,7 +738,7 @@ UniValue getbalance(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() > 3)
+    if (fHelp || params.size() > 4)
         throw runtime_error(
             "getbalance ( \"account\" minconf includeWatchonly )\n"
             "\nIf account is not specified, returns the server's total available balance.\n"
@@ -688,7 +749,9 @@ UniValue getbalance(const UniValue& params, bool fHelp)
             "1. \"account\"      (string, optional) DEPRECATED. The selected account, or \"*\" for entire wallet. It may be the default account using \"\".\n"
             "2. minconf          (numeric, optional, default=1) Only include transactions confirmed at least this many times.\n"
             "3. includeWatchonly (bool, optional, default=false) Also include balance in watchonly addresses (see 'importaddress')\n"
+            "4. \"assetlabel\"   (string, optional) Hex asset id or asset label for balance. \"*\" retrieves all known asset balances. IF THIS IS USED ALL ACCOUNT ARGUMENTS ARE IGNORED\n"
             "\nResult:\n"
+
             "amount              (numeric) The total amount in " + CURRENCY_UNIT + " received for this account.\n"
             "\nExamples:\n"
             "\nThe total amount in the wallet\n"
@@ -702,7 +765,7 @@ UniValue getbalance(const UniValue& params, bool fHelp)
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
     if (params.size() == 0)
-        return  ValueFromAmount(pwalletMain->GetBalance());
+        return  ValueFromAmount(pwalletMain->GetBalance()[pwalletMain->mapAssetIDs["bitcoin"]]);
 
     int nMinDepth = 1;
     if (params.size() > 1)
@@ -711,6 +774,17 @@ UniValue getbalance(const UniValue& params, bool fHelp)
     if(params.size() > 2)
         if(params[2].get_bool())
             filter = filter | ISMINE_WATCH_ONLY;
+
+    // Asset type ignores accounts. Accounts are scary and deprecated anyways.
+    // TODO: Yell at user if args aren't default/blank account
+    if (params.size() > 3) {
+        if (params[3].isStr()) {
+            std::string assettype = params[3].get_str();
+            CAmountMap balance = pwalletMain->GetBalance();
+            UniValue obj(UniValue::VOBJ);
+            return PushAssetBalance(balance, pwalletMain, assettype);
+        }
+    }
 
     if (params[0].get_str() == "*") {
         // Calculate total balance a different way from GetBalance()
@@ -752,14 +826,24 @@ UniValue getunconfirmedbalance(const UniValue &params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() > 0)
+    if (fHelp || params.size() > 1)
         throw runtime_error(
-                "getunconfirmedbalance\n"
-                "Returns the server's total unconfirmed balance\n");
+            "getunconfirmedbalance\n"
+            "\nArguments:\n"
+            "1. \"assetlabel\"               (string, optional) Hex asset id or asset label for balance. \"*\" retrieves all known asset balances.\n"
+            "Returns the server's total unconfirmed balance\n");
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
-    return ValueFromAmount(pwalletMain->GetUnconfirmedBalance());
+    CAmountMap balance = pwalletMain->GetUnconfirmedBalance();
+
+    if (params.size() > 0) {
+        UniValue obj(UniValue::VOBJ);
+        std::string strasset = params[0].get_str();
+        return PushAssetBalance(balance, pwalletMain, strasset);
+    }
+
+    return ValueFromAmount(balance[pwalletMain->mapAssetIDs["bitcoin"]]);
 }
 
 
@@ -873,7 +957,7 @@ UniValue sendfrom(const UniValue& params, bool fHelp)
     if (nAmount > nBalance)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
 
-    SendMoney(address.Get(), nAmount, false, confidentiality_pubkey, wtx);
+    SendMoney(address.Get(), nAmount, BITCOINID, false, confidentiality_pubkey, wtx);
 
     AuditLogPrintf("%s : sendfrom %s %s %s txid:%s\n", getUser(), params[0].get_str(), params[1].get_str(), params[2].getValStr(), wtx.GetHash().GetHex());
 
@@ -886,7 +970,7 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 2 || params.size() > 5)
+    if (fHelp || params.size() < 2 || params.size() > 6)
         throw runtime_error(
             "sendmany \"fromaccount\" {\"address\":amount,...} ( minconf \"comment\" [\"address\",...] )\n"
             "\nSend multiple times. Amounts are double-precision floating point numbers."
@@ -908,6 +992,11 @@ UniValue sendmany(const UniValue& params, bool fHelp)
             "      \"address\"            (string) Subtract fee from this address\n"
             "      ,...\n"
             "    ]\n"
+            "6. \"output_assetids\"     (string, optional, default=bitcoin) a json object of assetids to addresses\n"
+            "   {\n"
+            "       \"address\": \"hex\" \n"
+            "       ...\n"
+            "   }\n"
             "\nResult:\n"
             "\"transactionid\"          (string) The transaction id for the send. Only 1 transaction is created regardless of \n"
             "                                    the number of addresses.\n"
@@ -939,6 +1028,13 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     if (params.size() > 4)
         subtractFeeFromAmount = params[4].get_array();
 
+    UniValue assetids;
+    if (params.size() > 5 && !params[5].isNull()) {
+        if (strAccount != "")
+           throw JSONRPCError(RPC_TYPE_ERROR, "Accounts can not be used with assets.");
+        assetids = params[5].get_obj();
+    }
+
     set<CBitcoinAddress> setAddress;
     vector<CRecipient> vecSend;
 
@@ -950,6 +1046,18 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     BOOST_FOREACH(const string& name_, keys)
     {
         CBitcoinAddress address(name_);
+
+        std::string strasset = "bitcoin";
+        if (!assetids.isNull()) {
+            strasset = assetids[name_].get_str();
+        }
+
+        CAssetID asset(uint256S(strasset));
+        if (pwalletMain->GetAssetLabelFromID(uint256S(strasset)) == "")
+            asset = pwalletMain->GetAssetIDFromLabel(strasset);
+        if (asset == uint256())
+            throw JSONRPCError(RPC_WALLET_ERROR, "Unknown or invalid asset id/label");
+
         if (!address.IsValid())
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, string("Invalid Bitcoin address: ")+name_);
 
@@ -976,7 +1084,7 @@ UniValue sendmany(const UniValue& params, bool fHelp)
                 fSubtractFeeFromAmount = true;
         }
 
-        CRecipient recipient = {scriptPubKey, nAmount, confidentiality_pubkey, fSubtractFeeFromAmount};
+        CRecipient recipient = {scriptPubKey, nAmount, asset, confidentiality_pubkey, fSubtractFeeFromAmount};
         vecSend.push_back(recipient);
 
     }
@@ -989,14 +1097,25 @@ UniValue sendmany(const UniValue& params, bool fHelp)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
 
     // Send
-    CReserveKey keyChange(pwalletMain);
+    std::vector<CReserveKey> vChangeKey;
+    std::vector<CReserveKey*> vpChangeKey;
+    std::set<CAssetID> setAssetIDs;
+    vChangeKey.push_back(CReserveKey(pwalletMain));
+    setAssetIDs.insert(pwalletMain->GetAssetIDFromLabel("bitcoin"));
+    for (auto recipient : vecSend) {
+        if (setAssetIDs.count(recipient.asset) == 0) {
+                vChangeKey.push_back(CReserveKey(pwalletMain));
+                vpChangeKey.push_back(&vChangeKey[vChangeKey.size()-1]);
+                setAssetIDs.insert(recipient.asset);
+        }
+    }
     CAmount nFeeRequired = 0;
     int nChangePosRet = -1;
     string strFailReason;
-    bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, keyChange, nFeeRequired, nChangePosRet, strFailReason);
+    bool fCreated = pwalletMain->CreateTransaction(vecSend, wtx, vpChangeKey, nFeeRequired, nChangePosRet, strFailReason);
     if (!fCreated)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, strFailReason);
-    if (!pwalletMain->CommitTransaction(wtx, keyChange))
+    if (!pwalletMain->CommitTransaction(wtx, vpChangeKey))
         throw JSONRPCError(RPC_WALLET_ERROR, "Transaction commit failed");
 
     std::string blinds;
@@ -1186,6 +1305,18 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
         if(params[2].get_bool())
             filter = filter | ISMINE_WATCH_ONLY;
 
+    std::string asset = "bitcoin";
+    if (params.size() > 3 && params[3].isStr()) {
+        if (fByAccounts)
+            throw JSONRPCError(RPC_WALLET_ERROR, "Accounts are completely disabled for assets.");
+        asset = params[3].get_str();
+    }
+    CAssetID id(uint256S(asset));
+    if (asset != "*" && pwalletMain->GetAssetLabelFromID(uint256S(asset)) == "")
+        id = pwalletMain->GetAssetIDFromLabel(asset);
+    if (asset != "*" && id == uint256())
+        throw JSONRPCError(RPC_WALLET_ERROR, "Unknown or invalid asset id/label");
+
     // Tally
     map<CTxDestination, tallyitem> mapTally;
     for (map<uint256, CWalletTx>::iterator it = pwalletMain->mapWallet.begin(); it != pwalletMain->mapWallet.end(); ++it)
@@ -1210,6 +1341,9 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
                 continue;
 
             if (wtx.GetValueOut(i) < 0)
+                continue;
+
+            if (wtx.GetAssetID(i) != id && asset != "*")
                 continue;
 
             CBitcoinAddress bitcoinaddress(address);
@@ -1304,7 +1438,7 @@ UniValue listreceivedbyaddress(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() > 3)
+    if (fHelp || params.size() > 4)
         throw runtime_error(
             "listreceivedbyaddress ( minconf includeempty includeWatchonly)\n"
             "\nList balances by receiving address.\n"
@@ -1312,7 +1446,7 @@ UniValue listreceivedbyaddress(const UniValue& params, bool fHelp)
             "1. minconf       (numeric, optional, default=1) The minimum number of confirmations before payments are included.\n"
             "2. includeempty  (bool, optional, default=false) Whether to include addresses that haven't received any payments.\n"
             "3. includeWatchonly (bool, optional, default=false) Whether to include watchonly addresses (see 'importaddress').\n"
-
+            "4. assetlabel       (string, optional) Hex asset id or asset label for balance.\n"
             "\nResult:\n"
             "[\n"
             "  {\n"
@@ -1406,6 +1540,7 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
             MaybePushAddress(entry, s.destination, s.confidentiality_pubkey);
             entry.push_back(Pair("category", "send"));
             entry.push_back(Pair("amount", ValueFromAmount(-s.amount)));
+            entry.push_back(Pair("assetid", s.assetID.GetHex()));
             if (pwalletMain->mapAddressBook.count(s.destination))
                 entry.push_back(Pair("label", pwalletMain->mapAddressBook[s.destination].name));
             entry.push_back(Pair("vout", s.vout));
@@ -1446,6 +1581,7 @@ void ListTransactions(const CWalletTx& wtx, const string& strAccount, int nMinDe
                     entry.push_back(Pair("category", "receive"));
                 }
                 entry.push_back(Pair("amount", ValueFromAmount(r.amount)));
+                entry.push_back(Pair("assetid", r.assetID.GetHex()));
                 if (pwalletMain->mapAddressBook.count(r.destination))
                     entry.push_back(Pair("label", account));
                 entry.push_back(Pair("vout", r.vout));
@@ -1501,6 +1637,7 @@ UniValue listtransactions(const UniValue& params, bool fHelp)
             "                                                associated with an address, transaction id and block details\n"
             "    \"amount\": x.xxx,          (numeric) The amount in " + CURRENCY_UNIT + ". This is negative for the 'send' category, and for the\n"
             "                                         'move' category for moves outbound. It is positive for the 'receive' category,\n"
+            "    \"assetid\"                 (string) The asset id of the amount being moved.)\n"
             "                                         and for the 'move' category for inbound funds.\n"
             "    \"vout\": n,                (numeric) the vout value\n"
             "    \"fee\": x.xxx,             (numeric) The amount of the fee in " + CURRENCY_UNIT + ". This is negative and only available for the \n"
@@ -1778,13 +1915,14 @@ UniValue gettransaction(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() < 1 || params.size() > 2)
+    if (fHelp || params.size() < 1 || params.size() > 3)
         throw runtime_error(
             "gettransaction \"txid\" ( includeWatchonly )\n"
             "\nGet detailed information about in-wallet transaction <txid>\n"
             "\nArguments:\n"
             "1. \"txid\"    (string, required) The transaction id\n"
             "2. \"includeWatchonly\"    (bool, optional, default=false) Whether to include watchonly addresses in balance calculation and details[]\n"
+            "3. \"assetlabel\"          (string, optional, default=bitcoin) Hex asset id or asset label for balance. \"*\" retrieves all known asset balances.\n"
             "\nResult:\n"
             "{\n"
             "  \"amount\" : x.xxx,        (numeric) The transaction amount in " + CURRENCY_UNIT + "\n"
@@ -1827,17 +1965,23 @@ UniValue gettransaction(const UniValue& params, bool fHelp)
         if(params[1].get_bool())
             filter = filter | ISMINE_WATCH_ONLY;
 
+    std::string strasset = "bitcoin";
+    if (params.size() > 2) {
+        strasset = params[2].get_str();
+    }
+
     UniValue entry(UniValue::VOBJ);
     if (!pwalletMain->mapWallet.count(hash))
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid or non-wallet transaction id");
     const CWalletTx& wtx = pwalletMain->mapWallet[hash];
 
-    CAmount nCredit = wtx.GetCredit(filter);
-    CAmount nDebit = wtx.GetDebit(filter);
-    CAmount nNet = nCredit - nDebit;
+    CAmountMap nCredit = wtx.GetCredit(filter);
+    CAmountMap nDebit = wtx.GetDebit(filter);
     CAmount nFee = (wtx.IsFromMe(filter) ? -wtx.nTxFee : 0);
+    CAmountMap nNet = nCredit - nDebit;
+    nNet[pwalletMain->GetAssetIDFromLabel("bitcoin")] -= nFee;
 
-    entry.push_back(Pair("amount", ValueFromAmount(nNet - nFee)));
+    entry.push_back(Pair("amount", PushAssetBalance(nNet, pwalletMain, strasset)));
     if (wtx.IsFromMe(filter))
         entry.push_back(Pair("fee", ValueFromAmount(nFee)));
 
@@ -2341,10 +2485,11 @@ UniValue getwalletinfo(const UniValue& params, bool fHelp)
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
 
-    if (fHelp || params.size() != 0)
+    if (fHelp || params.size() > 1)
         throw runtime_error(
             "getwalletinfo\n"
             "Returns an object containing various wallet state info.\n"
+            "1. \"assetlabel\"               (string, optional) Hex asset id or asset label for balance. \"*\" retrieves all known asset balances.\n"
             "\nResult:\n"
             "{\n"
             "  \"walletversion\": xxxxx,       (numeric) the wallet version\n"
@@ -2367,9 +2512,17 @@ UniValue getwalletinfo(const UniValue& params, bool fHelp)
 
     UniValue obj(UniValue::VOBJ);
     obj.push_back(Pair("walletversion", pwalletMain->GetVersion()));
-    obj.push_back(Pair("balance",       ValueFromAmount(pwalletMain->GetBalance())));
-    obj.push_back(Pair("unconfirmed_balance", ValueFromAmount(pwalletMain->GetUnconfirmedBalance())));
-    obj.push_back(Pair("immature_balance",    ValueFromAmount(pwalletMain->GetImmatureBalance())));
+
+    std::string asset = "bitcoin";
+    if (params.size() > 0 && params[0].isStr()) {
+        asset = params[0].get_str();
+    }
+    CAmountMap balance = pwalletMain->GetBalance();
+    CAmountMap unBalance = pwalletMain->GetUnconfirmedBalance();
+    CAmountMap imBalance = pwalletMain->GetImmatureBalance();
+    obj.push_back(Pair("balance", PushAssetBalance(balance, pwalletMain, asset)));
+    obj.push_back(Pair("unconfirmed_balance", PushAssetBalance(unBalance, pwalletMain, asset)));
+    obj.push_back(Pair("immature_balance",    PushAssetBalance(imBalance, pwalletMain, asset)));
     obj.push_back(Pair("txcount",       (int)pwalletMain->mapWallet.size()));
     obj.push_back(Pair("keypoololdest", pwalletMain->GetOldestKeyPoolTime()));
     obj.push_back(Pair("keypoolsize",   (int)pwalletMain->GetKeyPoolSize()));
@@ -2435,6 +2588,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
             "    \"account\" : \"account\",    (string) DEPRECATED. The associated account, or \"\" for the default account\n"
             "    \"scriptPubKey\" : \"key\",   (string) the script key\n"
             "    \"amount\" : x.xxx,         (numeric) the transaction amount in " + CURRENCY_UNIT + "\n"
+            "    \"assetid\": \"hex\"        (string) the asset id for this output"
             "    \"confirmations\" : n,      (numeric) The number of confirmations\n"
             "    \"serValue\" : \"hex\",     (string) the output's value commitment\n"
             "    \"blinder\" : \"blind\"     (string) The blinding factor used for a confidential output (or \"\")\n"
@@ -2492,7 +2646,8 @@ UniValue listunspent(const UniValue& params, bool fHelp)
             continue;
 
         CAmount nValue = out.tx->GetValueOut(out.i);
-        if (nValue == -1)
+        CAssetID assetid = out.tx->GetAssetID(out.i);
+        if (nValue == -1 || assetid == uint256())
             continue;
 
         UniValue entry(UniValue::VOBJ);
@@ -2515,6 +2670,7 @@ UniValue listunspent(const UniValue& params, bool fHelp)
 
         entry.push_back(Pair("scriptPubKey", HexStr(scriptPubKey.begin(), scriptPubKey.end())));
         entry.push_back(Pair("amount", ValueFromAmount(nValue)));
+        entry.push_back(Pair("assetid", assetid.GetHex()));
         entry.push_back(Pair("confirmations", out.nDepth));
         entry.push_back(Pair("spendable", out.fSpendable));
         entry.push_back(Pair("solvable", out.fSolvable));
@@ -2896,7 +3052,7 @@ UniValue sendtomainchain(const UniValue& params, bool fHelp)
     EnsureWalletIsUnlocked();
 
     CWalletTx wtxNew;
-    SendMoney(scriptPubKey, nAmount, false, CPubKey(), wtxNew);
+    SendMoney(scriptPubKey, nAmount, BITCOINID, false, CPubKey(), wtxNew);
 
     std::string blinds;
     for (unsigned int i=0; i<wtxNew.vout.size(); i++) {
@@ -2992,10 +3148,8 @@ UniValue claimpegin(const UniValue& params, bool fHelp)
     if (value > MAX_MONEY / 200)
         throw JSONRPCError(RPC_VERIFY_REJECTED, "IsStandard rules prevent pegging-in > 0.105 million BTC reliably at a time - please work with your functionary to mine a large lock-merge transaction first");
 
-    uint256 bitcoinID(BITCOINID);
-
     //Pad the locked outputs by the IsStandard lock dust value
-    CTxOut dummyTxOut(bitcoinID, 0, relock_spk);
+    CTxOut dummyTxOut(BITCOINID, 0, relock_spk);
     CAmount lockDust(dummyTxOut.GetDustThreshold(withdrawLockTxFee));
 
     LOCK(cs_main);
@@ -3009,7 +3163,7 @@ UniValue claimpegin(const UniValue& params, bool fHelp)
         mtxn.vin.push_back(CTxIn(lockedUTXO[0].first.hash, lockedUTXO[0].first.n, CScript(), ~(uint32_t)0));
         mtxn.vin.push_back(CTxIn(lockedUTXO[1].first.hash, lockedUTXO[1].first.n, CScript(), ~(uint32_t)0));
         CAmount out_value = lockedUTXO[0].second + lockedUTXO[1].second;
-        mtxn.vout.push_back(CTxOut(bitcoinID, out_value, relock_spk));
+        mtxn.vout.push_back(CTxOut(BITCOINID, out_value, relock_spk));
 
         CValidationState state;
         bool fMissingInputs;
@@ -3037,8 +3191,8 @@ UniValue claimpegin(const UniValue& params, bool fHelp)
     //Build the transaction
     CMutableTransaction mtxn;
     CTxIn txin(utxo_txid, utxo_vout, scriptSig, ~(uint32_t)0);
-    CTxOut txout(bitcoinID, value, GetScriptForDestination(sidechainAddress.Get()));
-    CTxOut txrelock(bitcoinID, utxo_value - value, relock_spk);
+    CTxOut txout(BITCOINID, value, GetScriptForDestination(sidechainAddress.Get()));
+    CTxOut txrelock(BITCOINID, utxo_value - value, relock_spk);
     mtxn.vin.push_back(txin);
     mtxn.vout.push_back(txout);
     mtxn.vout.push_back(txrelock);
@@ -3052,6 +3206,57 @@ UniValue claimpegin(const UniValue& params, bool fHelp)
     sendrawtransaction(signedTxnArray, false);
     AuditLogPrintf("%s : claimpegin %s\n", getUser(), finalTxn.ToString());
     return finalTxn.GetHash().GetHex();
+}
+
+UniValue addassetlabel(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    // TODO: Add basic protection against over-writing asset
+    if (fHelp || params.size() != 2)
+        throw runtime_error(
+            "addassetlabel id label\n"
+            "\nAdd a label to a known asset ID. This label can be used in place of the ID for all asset-compatible RPC calls.\n"
+            "\nArguments:\n"
+            "1. \"id\"            (string, required) Hex ID that will be given label.\n"
+            "2. \"label\"         (string, required) Label that will be assigned to ID.\n"
+            "\nExamples:\n"
+            + HelpExampleCli("addassetlabel", "\"fa821b0be5e1387adbcb69dbb3ad33edb5e470831c7c938c4e7b344edbe8bb11\", \"ethereum\"")
+            + HelpExampleRpc("addassetlabel", "\"fa821b0be5e1387adbcb69dbb3ad33edb5e470831c7c938c4e7b344edbe8bb11\", \"ethereum\"")
+        );
+    RPCTypeCheck(params, boost::assign::list_of(UniValue::VSTR)(UniValue::VSTR));
+
+    std::string id = params[0].get_str();
+    std::string label = params[1].get_str();
+    if (!IsHex(id) || id.size() != 64)
+        throw JSONRPCError(RPC_TYPE_ERROR, "Asset ID must be hex of length 64");
+    if (label == "bitcoin" || label == "Bitcoin" || label == "btc")
+        throw JSONRPCError(RPC_TYPE_ERROR, "'bitcoin' label is protected");
+    else if (label.size() > 32 || label.size() < 3) {
+        throw JSONRPCError(RPC_TYPE_ERROR, "Please pick a label between 3 and 32 characters.");
+    }
+
+    pwalletMain->SetAssetPair(label, uint256S(id));
+
+    return NullUniValue;
+}
+
+UniValue dumpassetlabels(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "dumpassetlabels\n"
+            "\nLists all known asset id/label pairs in this wallet. This list can be modified by `addassetlabel` command.\n"
+        );
+    UniValue obj(UniValue::VOBJ);
+    for (std::map<std::string, CAssetID>::const_iterator it = pwalletMain->mapAssetIDs.begin(); it != pwalletMain->mapAssetIDs.end(); it++) {
+        obj.push_back(Pair(it->first, it->second.GetHex()));
+    }
+    return obj;
 }
 
 extern UniValue dumpprivkey(const UniValue& params, bool fHelp); // in rpcdump.cpp
@@ -3071,9 +3276,11 @@ static const CRPCCommand commands[] =
     { "rawtransactions",    "fundrawtransaction",       &fundrawtransaction,       false },
     { "hidden",             "resendwallettransactions", &resendwallettransactions, true  },
     { "wallet",             "abandontransaction",       &abandontransaction,       false },
+    { "wallet",             "addassetlabel",            &addassetlabel,            true  },
     { "wallet",             "addmultisigaddress",       &addmultisigaddress,       true  },
     { "wallet",             "addwitnessaddress",        &addwitnessaddress,        true  },
     { "wallet",             "backupwallet",             &backupwallet,             true  },
+    { "wallet",             "dumpassetlabels",          &dumpassetlabels,          true  },
     { "wallet",             "dumpblindingkey",          &dumpblindingkey,          true  },
     { "wallet",             "dumpprivkey",              &dumpprivkey,              true  },
     { "wallet",             "dumpwallet",               &dumpwallet,               true  },
