@@ -8,9 +8,8 @@ What is the Elements Project?
 Elements is an open source collaborative project where we work on a collection
 of experiments to more rapidly bring technical innovation to Bitcoin.  Elements
 are features that are proposed and developed in this technical community that in
-arbitrary combinations can be fashioned into sidechains.
-
-https://github.com/ElementsProject/elementsproject.github.io
+arbitrary combinations can be fashioned into sidechains, which are extensions of
+the Bitcoin blockchain.
 
 Learn more on [the Elements Project website](https://www.elementsproject.org).
 
@@ -31,7 +30,12 @@ What is Elements Alpha?
 -----------------------
 https://github.com/ElementsProject/elements/tree/alpha
 
-Elements Alpha is the Elements project's first experimental test chain.
+Elements Alpha is the Elements project's first experimental sidechain.  We
+launched it in 2015, and have been operating it since.  If you don't have the
+ability to [create your own sidechain][create-your-own], you can 
+
+**Alpha does not have all of the features contained within Elements**, as it is
+running the `alpha` branch.
 
 Compared to Bitcoin itself, it adds the following features:
  * [Confidential Transactions][confidential-transactions]
@@ -44,11 +48,11 @@ Compared to Bitcoin itself, it adds the following features:
 
 Getting Started
 ---------------
-See alpha-README.md for build and use instructions.
+See [the "Creating Your Own Sidechain" guide][create-your-own].
 
 License
 -------
-Elements Alpha is released under the terms of the MIT license. See [COPYING](COPYING) for more
+Elements is released under the terms of the MIT license. See [COPYING](COPYING) for more
 information or see http://opensource.org/licenses/MIT.
 
 [confidential-transactions]: https://www.elementsproject.org/elements/confidential-transactions
@@ -58,3 +62,5 @@ information or see http://opensource.org/licenses/MIT.
 [opcodes]: https://www.elementsproject.org/elements/opcodes
 [deterministic-peg]: https://www.elementsproject.org/elements/deterministic-pegs
 [signed-blocks]: https://www.elementsproject.org/elements/signed-blocks
+[create-your-own]: https://www.elementsproject.org/sidechains/creating-your-own.html
+[alpha-branch]: https://github.com/ElementsProject/elements/tree/alpha
