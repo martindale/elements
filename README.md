@@ -15,9 +15,7 @@ Learn more on [the Elements Project website](https://www.elementsproject.org).
 
 What is Bitcoin?
 ----------------
-https://www.bitcoin.org
-
-Bitcoin is an experimental new digital currency that enables instant payments to
+[Bitcoin][bitcoin] is an experimental new digital currency that enables instant payments to
 anyone, anywhere in the world. Bitcoin uses peer-to-peer technology to operate
 with no central authority: managing transactions and issuing money are carried
 out collectively by the network. Elements Alpha is the name of open source
@@ -28,14 +26,12 @@ the Bitcoin Core software, see https://www.bitcoin.org/en/download.
 
 What is Elements Alpha?
 -----------------------
-https://github.com/ElementsProject/elements/tree/alpha
-
 Elements Alpha is the Elements project's first experimental sidechain.  We
 launched it in 2015, and have been operating it since.  If you don't have the
 ability to [create your own sidechain][create-your-own], you can 
 
 **Alpha does not have all of the features contained within Elements**, as it is
-running the `alpha` branch.
+running [the `alpha` branch][alpha-branch].
 
 Compared to Bitcoin itself, it adds the following features:
  * [Confidential Transactions][confidential-transactions]
@@ -63,4 +59,6 @@ information or see http://opensource.org/licenses/MIT.
 [deterministic-peg]: https://www.elementsproject.org/elements/deterministic-pegs
 [signed-blocks]: https://www.elementsproject.org/elements/signed-blocks
 [create-your-own]: https://www.elementsproject.org/sidechains/creating-your-own.html
+[alpha-branch]: https://github.com/ElementsProject/elements/tree/alpha
+[bitcoin]: https://bitcoin.org
 [alpha-branch]: https://github.com/ElementsProject/elements/tree/alpha
