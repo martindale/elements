@@ -59,7 +59,6 @@ public:
                     break;
                 default:
                     throw std::ios_base::failure("Unrecognized serialization prefix");
-                    return;
             }
             vchAssetTag[0] = version;
         }
@@ -144,10 +143,6 @@ public:
                 case 1:
                     vchCommitment.resize(nExplicitSize);
                     break;
-                // Alpha used 2 and 3 for value commitments
-                case 2:
-                case 3:
-                    break;
                 /* Committed value */
                 case 8:
                 case 9:
@@ -155,7 +150,6 @@ public:
                     break;
                 default:
                     throw std::ios_base::failure("Unrecognized serialization prefix");
-                    return;
             }
             vchCommitment[0] = version;
         }
