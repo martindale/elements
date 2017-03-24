@@ -403,6 +403,58 @@ static bool rest_tx(HTTPRequest* req, const std::string& strURIPart)
     return true; // continue to process further HTTP reqs on this cxn
 }
 
+static bool rest_getassets(HTTPRequest* req, const std::string& strURIPart)
+{
+    if (!CheckWarmup(req))
+        return false;
+    std::string hashStr;
+    const RetFormat rf = ParseDataFormat(hashStr, strURIPart);
+
+    uint256 hash;
+    if (!ParseHashStr(hashStr, hash))
+        return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
+
+    CTransactionRef tx;
+    uint256 hashBlock = uint256();
+    if (!GetAsset(hash, tx, Params().GetConsensus(), hashBlock, true))
+        return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
+
+    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION | RPCSerializationFlags());
+    ssTx << tx;
+
+    switch (rf) {
+    case RF_BINARY: {
+        std::string binaryTx = ssTx.str();
+        req->WriteHeader("Content-Type", "application/octet-stream");
+        req->WriteReply(HTTP_OK, binaryTx);
+        return true;
+    }
+
+    case RF_HEX: {
+        std::string strHex = HexStr(ssTx.begin(), ssTx.end()) + "\n";
+        req->WriteHeader("Content-Type", "text/plain");
+        req->WriteReply(HTTP_OK, strHex);
+        return true;
+    }
+
+    case RF_JSON: {
+        UniValue objTx(UniValue::VOBJ);
+        TxToJSON(*tx, hashBlock, objTx);
+        std::string strJSON = objTx.write() + "\n";
+        req->WriteHeader("Content-Type", "application/json");
+        req->WriteReply(HTTP_OK, strJSON);
+        return true;
+    }
+
+    default: {
+        return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
+    }
+    }
+
+    // not reached
+    return true; // continue to process further HTTP reqs on this cxn
+}
+
 static bool rest_getutxos(HTTPRequest* req, const std::string& strURIPart)
 {
     if (!CheckWarmup(req))
@@ -613,6 +665,7 @@ static const struct {
       {"/rest/mempool/contents", rest_mempool_contents},
       {"/rest/headers/", rest_headers},
       {"/rest/getutxos", rest_getutxos},
+      {"/assets", rest_getassets},
 };
 
 bool StartREST()
